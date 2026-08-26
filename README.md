@@ -99,6 +99,19 @@ node self-test.mjs                # 向全部启用通道发一条样例通知
 node self-test.mjs --channel desktop # 只测桌面通道
 ```
 
+## 安装路径冒烟
+
+打包后用真实 npm install 把插件装进一个干净项目，再跑一次完整的
+apply() 事件接线与 composeBody 渲染（assert body 含 `· HH:mm`）：
+
+```bash
+npm run smoke
+```
+
+脚本会建临时目录、用本地 npm 缓存装刚打的 tarball、执行
+`scripts/install-smoke.mjs` 对已安装模块做 import 校验、注册监听、派发
+gent/status、断言 capture 到 body 后缀。非零退出表示发版前就得修。
+
 ## 菜单设置
 
 不想手编 yaml，可以跑交互菜单（编辑 `~/.dsh/settings.yaml` 的 `task-notify:`
