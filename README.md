@@ -33,6 +33,9 @@ task-notify:
   desktop:
     enabled: auto                     # auto | on | off（auto 按平台探测）
     sound: true                       # macOS 播放 Glass 提示音；Windows 静音开关
+  format:
+    time: short                       # hidden | short | full —— 正文尾部时间样式
+    showDuration: true                # 负载携带 durationMs 时追加「用时 X」
   icons:
     enabled: true                     # 图形图标总开关
     urlTemplate: ""                   # 远程图标模板，如 https://host/icons/{event}.svg
@@ -58,6 +61,16 @@ task-notify:
 优先级：patch 显式配置 > `settings.yaml` > 环境变量（如
 `DSH_TASK_NOTIFY_BARK_DEVICE_KEY`、`DSH_TASK_NOTIFY_ICONS_URL_TEMPLATE`）>
 内置默认值。
+
+### 通知排版
+
+通知正文由 `composeBody` 统一组装为：`内容摘要 · 时间 · 用时 X`。
+
+- `format.time` 控制时间样式：`short`=HH:mm（默认）、`full`=YYYY-MM-DD HH:mm:ss、
+  `hidden`=不显示；对应环境变量 `DSH_TASK_NOTIFY_FORMAT_TIME`
+- `format.showDuration`：负载带 `durationMs` 时追加「用时 X」（42秒 / 3分05秒 / 1小时02分）
+- 时间与用时后缀**不参与截断**——`maxBodyLength` 只作用于内容摘要，
+  任何配置下时间都完整可见；对应环境变量 `DSH_TASK_NOTIFY_FORMAT_SHOW_DURATION`
 
 ### 文案与图标
 

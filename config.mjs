@@ -41,13 +41,16 @@ export function defaultConfig() {
     // SPEC §7.3：图形图标。enabled 默认 true（总开关）；urlTemplate 为空表示
     // 未配置远程图标 URL，payload.iconUrl 渲染为 ""。
     icons: { enabled: true, urlTemplate: '' },
+    // v0.3：通知排版。time 控制正文尾部时间样式（hidden | short | full），
+    // showDuration 在 payload 带 durationMs 时追加 "用时 X" 后缀。
+    format: { time: 'short', showDuration: true },
   };
 }
 
 /** 各层级允许出现的键（未知键忽略 + warn）。通道段内部键单独校验。 */
 const KNOWN_TOP_KEYS = new Set([
   'enabled', 'notifyOn', 'agents', 'coalesceWindowMs', 'maxBodyLength',
-  'desktop', 'bark', 'ntfy', 'serverchan', 'webhook', 'icons',
+  'desktop', 'bark', 'ntfy', 'serverchan', 'webhook', 'icons', 'format',
 ]);
 const KNOWN_SECTION_KEYS = {
   desktop: new Set(['enabled', 'sound']),
@@ -56,6 +59,7 @@ const KNOWN_SECTION_KEYS = {
   serverchan: new Set(['enabled', 'sendKey']),
   webhook: new Set(['enabled', 'url', 'headers']),
   icons: new Set(['enabled', 'urlTemplate']),
+  format: new Set(['time', 'showDuration']),
 };
 
 /**
@@ -178,6 +182,9 @@ const ENV_MAP = [
   // SPEC §7.3：icons 段
   ['DSH_TASK_NOTIFY_ICONS_ENABLED', ['icons'], 'enabled', coerceBool],
   ['DSH_TASK_NOTIFY_ICONS_URL_TEMPLATE', ['icons'], 'urlTemplate', coerceTrimmedString],
+  // v0.3：format 段
+  ['DSH_TASK_NOTIFY_FORMAT_TIME', ['format'], 'time', coerceTimeStyle],
+  ['DSH_TASK_NOTIFY_FORMAT_SHOW_DURATION', ['format'], 'showDuration', coerceBool],
 ];
 
 function applyEnvLayer(target, env, warn) {
@@ -270,6 +277,14 @@ function normalizeInPlace(cfg, warn) {
     'icons.urlTemplate',
     warn,
   );
+
+  // v0.3：format 段。与通道段不同，showDuration 默认 true，单独归一化。
+  if (!isPlainObject(cfg.format)) {
+    warn('format 段不是对象，已回退默认值');
+    cfg.format = { ...defaultConfig().format };
+  }
+  cfg.format.time = withFallback(coerceTimeStyle(cfg.format.time), 'short', 'format.time', warn);
+  cfg.format.showDuration = withFallback(coerceBool(cfg.format.showDuration), true, 'format.showDuration', warn);
 }
 
 function normalizeChannel(section, knownKeys, name, warn, stringDefaults = {}) {
@@ -333,6 +348,13 @@ function coerceDesktopMode(v) {
   const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
   if (s === 'auto' || s === 'on' || s === 'off') return ok(s);
   return fail(`desktop.enabled 只接受 auto | on | off`);
+}
+
+/** v0.3：format.time 合法值。 */
+function coerceTimeStyle(v) {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  if (s === 'hidden' || s === 'short' || s === 'full') return ok(s);
+  return fail('format.time 只接受 hidden | short | full');
 }
 
 const KNOWN_EVENTS = new Set(['idle', 'error', 'blocked', 'goal-completed']);

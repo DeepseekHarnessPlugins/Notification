@@ -78,6 +78,13 @@ const FALLBACK_TITLES = Object.freeze({
   'goal-completed': '目标达成',
 });
 
+/** 降级排版：与 format.mjs 的 composeBody 同签名，但不追加时间后缀。 */
+function degradedComposeBody(text, options = {}) {
+  const collapsed = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const limit = Math.max(1, Number(options?.maxLen) || 120);
+  return collapsed.length <= limit ? collapsed : collapsed.slice(0, limit - 1) + '…';
+}
+
 export const fallbackFormat = Object.freeze({
   // SPEC §7.1：无 emoji 文案；未知事件回退通用标题（与 format.mjs 同规格）。
   formatTitle: (event) => FALLBACK_TITLES[event] ?? '任务通知',
@@ -86,6 +93,8 @@ export const fallbackFormat = Object.freeze({
     const limit = Math.max(1, Number(maxLen) || 120);
     return collapsed.length <= limit ? collapsed : `${collapsed.slice(0, limit - 1)}…`;
   },
+  // v0.3：降级模式的组合排版——无时钟依赖，保持旧纯摘要行为。
+  composeBody: degradedComposeBody,
 });
 
 /** 判断一个模块对象是否符合 format 契约（formatTitle/formatBody 函数）。 */
@@ -178,13 +187,25 @@ export function apply(ctx, input = {}, overrides = {}) {
 
       // 构造与入队保持同步完成：dedupe 只保留同会话最后一次的最终 payload。
       const sessionId = safeId(agent) || String(agent.id);
+      const ts = deps.now();
+      const rawBody = deriveBody(agent, sessionId);
+      // v0.3：composeBody 存在时正文尾部带格式化时间（format.time 控制）；
+      // 旧契约（overrides.format 注入的假 format）无此方法时保持纯摘要行为。
+      const body = typeof format.composeBody === 'function'
+        ? format.composeBody(rawBody, {
+            ts,
+            timeStyle: config.format.time,
+            showDuration: config.format.showDuration,
+            maxLen: config.maxBodyLength,
+          })
+        : format.formatBody(rawBody, config.maxBodyLength);
       const notification = {
         event: status,
         title: format.formatTitle(status),
-        body: format.formatBody(deriveBody(agent, sessionId), config.maxBodyLength),
+        body,
         sessionId,
         agentId: safeId(agent), // 研究：Agent.id 即 SessionId（恒等 brand），二者相同
-        ts: deps.now(),
+        ts,
         iconUrl: renderIconUrl(config.icons, status), // SPEC §7.4：未配置/禁用为 ""
       };
       coalescer.push(sessionId, () => dispatch(notification));

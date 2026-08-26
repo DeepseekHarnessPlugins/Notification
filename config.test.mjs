@@ -261,3 +261,32 @@ test('webhook.headers 非 JSON 字符串被拒绝并 warn', () => {
   assert.deepEqual(config.webhook.headers, {});
   assert.ok(warnings.some((w) => w.includes('DSH_TASK_NOTIFY_WEBHOOK_HEADERS')));
 });
+
+/* ---- v0.3：format 段 ---- */
+
+test('format 段默认值：time=short、showDuration=true', () => {
+  const config = resolveConfig({}, {}, null);
+  assert.deepEqual({ ...config.format }, { time: 'short', showDuration: true });
+});
+
+test('format 段三层合并：env 与 patch input 均生效', () => {
+  const viaEnv = resolveConfig({}, { DSH_TASK_NOTIFY_FORMAT_TIME: 'full', DSH_TASK_NOTIFY_FORMAT_SHOW_DURATION: 'false' }, null);
+  assert.equal(viaEnv.format.time, 'full');
+  assert.equal(viaEnv.format.showDuration, false);
+
+  const viaPatch = resolveConfig({ format: { time: 'hidden' } }, {}, null);
+  assert.equal(viaPatch.format.time, 'hidden');
+  assert.equal(viaPatch.format.showDuration, true); // 未覆盖键保持默认
+});
+
+test('format.time 非法值回退默认并 warn', () => {
+  const { config, warnings } = resolveConfigDetailed({ format: { time: 'sometimes' } }, {}, null);
+  assert.equal(config.format.time, 'short');
+  assert.ok(warnings.some((w) => w.includes('format.time')));
+});
+
+test('format 段不是对象时整体回退默认', () => {
+  const { config, warnings } = resolveConfigDetailed({ format: 'short' }, {}, null);
+  assert.deepEqual({ ...config.format }, { time: 'short', showDuration: true });
+  assert.ok(warnings.some((w) => w.includes('format 段')));
+});

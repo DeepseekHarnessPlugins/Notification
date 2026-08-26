@@ -5,7 +5,10 @@ import {
   DEFAULT_MAX_BODY_LENGTH,
   EVENT_META,
   FALLBACK_ICON,
+  composeBody,
   formatBody,
+  formatDuration,
+  formatTime,
   formatTitle,
   stripEmoji,
 } from "./format.mjs";
@@ -123,5 +126,85 @@ describe("stripEmoji", () => {
     assert.equal(stripEmoji(null), "");
     assert.equal(stripEmoji(undefined), "");
     assert.equal(stripEmoji(""), "");
+  });
+});
+
+describe("formatTime", () => {
+  // 用本地 Date 分量构造期望值，任何时区下都确定。
+  const d = new Date(2026, 7, 26, 14, 32, 5);
+  const ts = d.getTime();
+
+  test("short 样式渲染 HH:mm", () => {
+    const expected = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    assert.equal(formatTime(ts, "short"), expected);
+    assert.equal(formatTime(ts), expected); // 默认即 short
+  });
+
+  test("full 样式渲染 YYYY-MM-DD HH:mm:ss", () => {
+    const p = (n) => String(n).padStart(2, "0");
+    const expected = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+      " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+    assert.equal(formatTime(ts, "full"), expected);
+  });
+
+  test("hidden 返回空串，非法输入返回空串", () => {
+    assert.equal(formatTime(ts, "hidden"), "");
+    assert.equal(formatTime(undefined), "");
+    assert.equal(formatTime(Number.NaN), "");
+    assert.equal(formatTime("not-a-number"), "");
+    assert.equal(formatTime(new Date("invalid")), "");
+  });
+
+  test("接受 Date 对象与未知样式按 short 处理", () => {
+    assert.equal(formatTime(d, "short"), formatTime(ts, "short"));
+    assert.equal(formatTime(ts, "bogus-style"), formatTime(ts, "short"));
+  });
+});
+
+describe("formatDuration", () => {
+  test("秒/分/小时三段渲染", () => {
+    assert.equal(formatDuration(42_000), "42秒");
+    assert.equal(formatDuration(65_000), "1分05秒");
+    assert.equal(formatDuration(120_000), "2分");
+    assert.equal(formatDuration(3_720_000), "1小时02分");
+    assert.equal(formatDuration(3_600_000), "1小时");
+  });
+
+  test("非法与非正值返回空串", () => {
+    assert.equal(formatDuration(0), "");
+    assert.equal(formatDuration(-5), "");
+    assert.equal(formatDuration(undefined), "");
+    assert.equal(formatDuration(Number.NaN), "");
+  });
+});
+
+describe("composeBody", () => {
+  const ts = new Date(2026, 7, 26, 14, 32).getTime();
+
+  test("内容 + 短时间后缀", () => {
+    assert.equal(composeBody("部署完成", { ts, timeStyle: "short" }), "部署完成 · 14:32");
+  });
+
+  test("hidden 关闭时间；空内容只剩时间", () => {
+    assert.equal(composeBody("部署完成", { ts, timeStyle: "hidden" }), "部署完成");
+    assert.equal(composeBody("", { ts }), "14:32");
+    assert.equal(composeBody(null, { ts, timeStyle: "hidden" }), "");
+  });
+
+  test("showDuration 时追加用时后缀", () => {
+    assert.equal(
+      composeBody("完成", { ts, durationMs: 65_000 }),
+      "完成 · 14:32 · 用时 1分05秒",
+    );
+    assert.equal(
+      composeBody("完成", { ts, durationMs: 65_000, showDuration: false }),
+      "完成 · 14:32",
+    );
+  });
+
+  test("maxLen 只截断内容部分，时间后缀永远完整", () => {
+    const out = composeBody("这是一段会被截断的很长正文内容", { ts, maxLen: 5 });
+    assert.ok(out.startsWith("这是一段… · "));
+    assert.ok(out.endsWith("14:32"));
   });
 });

@@ -118,3 +118,91 @@ export function stripEmoji(text) {
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
+
+/* ------------------------------------------------------------------ */
+/* v0.3 时间与组合排版（格式化时间 + 通知正文组装）                      */
+/* ------------------------------------------------------------------ */
+
+/** formatTime 支持的样式。 */
+export const TIME_STYLES = Object.freeze(["hidden", "short", "full"]);
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/**
+ * 把 epoch 毫秒渲染成本地时间串。
+ *
+ * @param {number|Date|null|undefined} ts epoch 毫秒（也接受 Date）；非法值返回空串
+ * @param {string} [style="short"] "hidden" 不显示；"short" 为 HH:mm；
+ *   "full" 为 YYYY-MM-DD HH:mm:ss；未知样式按 short 处理
+ * @returns {string}
+ */
+export function formatTime(ts, style = "short") {
+  if (style === "hidden") return "";
+  const date = ts instanceof Date ? ts : new Date(ts);
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const hhmm = pad2(date.getHours()) + ":" + pad2(date.getMinutes());
+  if (style === "full") {
+    const y = date.getFullYear();
+    const mo = pad2(date.getMonth() + 1);
+    const d = pad2(date.getDate());
+    return y + "-" + mo + "-" + d + " " + hhmm + ":" + pad2(date.getSeconds());
+  }
+  return hhmm;
+}
+
+/**
+ * 把耗时毫秒渲染为紧凑中文时长；非正数/非有限值返回空串（调用方直接过滤）。
+ *
+ * @param {number|undefined} durationMs
+ * @returns {string} 如 "42秒"、"3分05秒"、"1小时02分"
+ */
+export function formatDuration(durationMs) {
+  const n = Number(durationMs);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const totalSec = Math.round(n / 1000);
+  if (totalSec < 60) return totalSec + "秒";
+  const totalMin = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (totalMin < 60) return sec > 0 ? totalMin + "分" + pad2(sec) + "秒" : totalMin + "分";
+  const hour = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  return min > 0 ? hour + "小时" + pad2(min) + "分" : hour + "小时";
+}
+
+/**
+ * 组装最终通知正文：内容摘要在前，时间与耗时作为后缀缀在末尾。
+ *
+ * 后缀永远不参与截断——formatBody 先对内容截到 maxLen，时间/耗时再以
+ * " · " 分隔接上，保证任何配置下时间都完整可见。全部部分为空时返回空串。
+ *
+ * @param {string|null|undefined} text 原始正文（会先经 formatBody 规整）
+ * @param {object} [options]
+ * @param {number|Date} [options.ts] epoch 毫秒，配合 timeStyle 渲染
+ * @param {number} [options.durationMs] 可选耗时，showDuration 时追加 "用时 X"
+ * @param {string} [options.timeStyle="short"] 传给 formatTime
+ * @param {boolean} [options.showDuration=true]
+ * @param {number} [options.maxLen] 内容截断上限（仅作用于内容部分）
+ * @returns {string}
+ */
+export function composeBody(text, options = {}) {
+  const {
+    ts,
+    durationMs,
+    timeStyle = "short",
+    showDuration = true,
+    maxLen = DEFAULT_MAX_BODY_LENGTH,
+  } = options ?? {};
+
+  const parts = [];
+  const content = formatBody(text, maxLen);
+  if (content) parts.push(content);
+
+  const time = formatTime(ts, timeStyle);
+  if (time) parts.push(time);
+
+  if (showDuration) {
+    const duration = formatDuration(durationMs);
+    if (duration) parts.push("用时 " + duration);
+  }
+  return parts.join(" · ");
+}
