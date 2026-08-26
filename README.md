@@ -101,4 +101,4 @@ npm test        # node --test 单元测试（不发真实通知）
 npm run icons   # 重新生成 assets/icons/*.png
 ```
 
-架构与契约详见 [SPEC.md](../SPEC.md)。
+架构与契约详见 [SPEC.md](./SPEC.md)。

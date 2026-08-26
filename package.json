@@ -13,6 +13,7 @@
     "dedupe.mjs",
     "format.mjs",
     "self-test.mjs",
+    "paths.mjs",
     "channels/",
     "assets/",
     "cordis.patch.yml",
@@ -26,7 +27,7 @@
   },
   "scripts": {
     "check": "for f in *.mjs channels/*.mjs; do node --check \"$f\" || exit 1; done",
-    "test": "node --test *.test.mjs channels/*.test.mjs",
+    "test": "node --test *.test.mjs channels/*.test.mjs scripts/*.test.mjs",
     "self-test": "node self-test.mjs",
     "icons": "node scripts/build-icons.mjs"
   },
