@@ -1,0 +1,49 @@
+{
+  "name": "dsh-task-notify",
+  "version": "0.2.0",
+  "description": "Task-completion system notifications for DeepSeek Harness — macOS Notification Center, Windows Toast, and mobile push via Bark / ntfy / ServerChan / webhook",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "config.mjs",
+    "dedupe.mjs",
+    "format.mjs",
+    "self-test.mjs",
+    "channels/",
+    "assets/",
+    "cordis.patch.yml",
+    "README.md",
+    "SPEC.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "check": "for f in *.mjs channels/*.mjs; do node --check \"$f\" || exit 1; done",
+    "test": "node --test *.test.mjs channels/*.test.mjs",
+    "self-test": "node self-test.mjs",
+    "icons": "node scripts/build-icons.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "^4.2.0"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "notification",
+    "task-completion",
+    "bark",
+    "ntfy",
+    "plugin"
+  ],
+  "license": "MIT"
+}

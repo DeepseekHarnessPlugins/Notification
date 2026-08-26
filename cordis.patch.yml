@@ -1,0 +1,9 @@
+- insert:
+    - id: task-notify
+      name: '@deepseek-ai/cordis-plugin-group'
+      group: true
+      isolate:
+        taskNotify: true
+      config:
+        - id: task-notify-runtime
+          name: dsh-task-notify

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- dsh-task-notify v0.2 icon: idle（任务完成）— 几何与 scripts/build-icons.mjs 中 ICONS.idle 锁定一致 -->
+  <!-- 底圆：圆心 (32,32) r=25，四周留边 7px；对勾：折线 (20,33)->(28.5,41.5)->(44,26)，stroke 6 圆头 -->
+  <circle cx="32" cy="32" r="25" fill="#34C759"/>
+  <path d="M20 33 L28.5 41.5 L44 26" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

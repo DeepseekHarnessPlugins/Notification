@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- dsh-task-notify v0.2 icon: notify（回退）— 几何与 scripts/build-icons.mjs 中 ICONS.notify 锁定一致 -->
+  <!-- 底圆：圆心 (32,32) r=25；白色实心小圆点 r=8 -->
+  <circle cx="32" cy="32" r="25" fill="#8E8E93"/>
+  <circle cx="32" cy="32" r="8" fill="#FFFFFF"/>
+</svg>
