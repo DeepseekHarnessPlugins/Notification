@@ -1,3 +1,5 @@
 node_modules/
 *.tgz
+.npm-cache/
 .DS_Store
+scripts/submit-awesome.sh
