@@ -99,6 +99,20 @@ node self-test.mjs                # 向全部启用通道发一条样例通知
 node self-test.mjs --channel desktop # 只测桌面通道
 ```
 
+## 菜单设置
+
+不想手编 yaml，可以跑交互菜单（编辑 `~/.dsh/settings.yaml` 的 `task-notify:`
+段；保存前自动备份为 `settings.yaml.bak-<时间戳>`，注意原文件注释不会保留）：
+
+```bash
+npm run menu
+```
+
+菜单能力：总开关、通知事件逐项开关、root/all、桌面模式与声音、时间样式
+（hidden/short/full）、用时后缀、正文长度与合并窗口；五个通道逐一启用并填写
+关键字段（Bark deviceKey、ntfy topic、Server酱 SendKey、Webhook URL），每个
+通道可当场发送测试通知验证链路。
+
 ## 工作原理
 
 订阅 Cordis 事件总线上的 `agent/status`：当顶层代理转入 `idle`（本轮任务

@@ -14,6 +14,8 @@
     "format.mjs",
     "self-test.mjs",
     "paths.mjs",
+    "menu.mjs",
+    "menu-core.mjs",
     "channels/",
     "assets/",
     "cordis.patch.yml",
@@ -29,6 +31,7 @@
     "check": "for f in *.mjs channels/*.mjs; do node --check \"$f\" || exit 1; done",
     "test": "node --test *.test.mjs channels/*.test.mjs scripts/*.test.mjs",
     "self-test": "node self-test.mjs",
+    "menu": "node menu.mjs",
     "icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
