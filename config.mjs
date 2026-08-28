@@ -29,7 +29,7 @@ export const DEFAULT_SETTINGS_PATH = join(homedir(), '.dsh', 'settings.yaml');
 export function defaultConfig() {
   return {
     enabled: true,
-    notifyOn: ['idle', 'error', 'blocked'],
+    notifyOn: ['idle', 'error', 'blocked', 'completed', 'goal-completed'],
     agents: 'root',
     coalesceWindowMs: 2000,
     maxBodyLength: 120,
