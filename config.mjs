@@ -20,7 +20,7 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
-import yaml from 'js-yaml';
+import { parseDocument, stringify } from 'yaml';
 
 /** 默认 settings.yaml 路径。 */
 export const DEFAULT_SETTINGS_PATH = join(homedir(), '.dsh', 'settings.yaml');
@@ -80,7 +80,13 @@ export function loadSettings(path, warn = () => {}) {
   }
   let doc;
   try {
-    doc = yaml.load(raw);
+    const parsed = parseDocument(raw);
+    // 检查解析错误（新 yaml 包不抛出，而是收集错误）
+    if (parsed.errors && parsed.errors.length > 0) {
+      warn(`settings.yaml 解析失败（${path}）：${parsed.errors[0].message}，已忽略该配置层`);
+      return null;
+    }
+    doc = parsed.toJS();
   } catch (error) {
     warn(`settings.yaml 解析失败（${path}）：${describe(error)}，已忽略该配置层`);
     return null;

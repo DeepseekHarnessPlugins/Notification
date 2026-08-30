@@ -38,7 +38,7 @@
     "icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
-    "js-yaml": "^4.2.0"
+    "yaml": "^2.5.0"
   },
   "engines": {
     "node": "^22.19.0 || >=24"

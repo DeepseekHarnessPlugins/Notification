@@ -11,6 +11,7 @@
 
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, copyFileSync } from 'node:fs';
+import { parseDocument, stringify } from 'yaml';
 import { createInterface } from 'node:readline/promises';
 import yaml from 'js-yaml';
 import { DEFAULT_SETTINGS_PATH, defaultConfig, loadSettings } from './config.mjs';
@@ -130,20 +131,24 @@ async function sendTest(channelKey) {
 /* ---------- 保存 ---------- */
 
 function save(section) {
-  let doc = {};
+  let doc;
   try {
-    const parsed = yaml.load(readFileSync(DEFAULT_SETTINGS_PATH, 'utf8'));
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) doc = parsed;
+    const raw = readFileSync(DEFAULT_SETTINGS_PATH, 'utf8');
+    doc = parseDocument(raw);
+    if (!doc || typeof doc.toJS !== 'function' || Array.isArray(doc.toJS())) {
+      doc = parseDocument('{}');
+    }
   } catch { /* 文件不存在或为空，从空文档开始 */ }
+  doc = doc || parseDocument('{}');
 
-  if (Object.keys(doc).length > 0) {
+  if (Object.keys(doc.toJS()).length > 0) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     copyFileSync(DEFAULT_SETTINGS_PATH, DEFAULT_SETTINGS_PATH + '.bak-' + stamp);
   }
-  doc[SECTION_KEY] = section;
-  writeFileSync(DEFAULT_SETTINGS_PATH, yaml.dump(doc, { lineWidth: -1 }), 'utf8');
+  doc.set(SECTION_KEY, section);
+  writeFileSync(DEFAULT_SETTINGS_PATH, String(doc), 'utf8');
   console.log('已写入 ' + DEFAULT_SETTINGS_PATH);
-  console.log('(提示：原文件注释不会被保留；如需回滚可用同目录 .bak-* 备份)');
+  console.log('(提示：已保留原文件注释；如需回滚可用同目录 .bak-* 备份)');
 }
 
 /* ---------- 输入源 ----------
