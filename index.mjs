@@ -142,6 +142,7 @@ export function apply(ctx, input = {}, overrides = {}) {
         logger.warn(`[task-notify] format.mjs 加载失败，使用内置文案模板：${describe(error)}`);
       });
   }
+  const sessionStartTimes = new Map();
 
   /** @type {Promise<Array<{name: string, send: (p: object) => Promise<void>}>>|null} */
   let channelsReady = null;
@@ -188,6 +189,8 @@ export function apply(ctx, input = {}, overrides = {}) {
       // 构造与入队保持同步完成：dedupe 只保留同会话最后一次的最终 payload。
       const sessionId = safeId(agent) || String(agent.id);
       const ts = deps.now();
+      if (!sessionStartTimes.has(sessionId)) sessionStartTimes.set(sessionId, ts);
+      const durationMs = ts - sessionStartTimes.get(sessionId);
       const rawBody = deriveBody(agent, sessionId);
       // v0.3：composeBody 存在时正文尾部带格式化时间（format.time 控制）；
       // 旧契约（overrides.format 注入的假 format）无此方法时保持纯摘要行为。
@@ -196,6 +199,7 @@ export function apply(ctx, input = {}, overrides = {}) {
             ts,
             timeStyle: config.format.time,
             showDuration: config.format.showDuration,
+            durationMs: durationMs,
             maxLen: config.maxBodyLength,
           })
         : format.formatBody(rawBody, config.maxBodyLength);
@@ -207,6 +211,7 @@ export function apply(ctx, input = {}, overrides = {}) {
         agentId: safeId(agent), // 研究：Agent.id 即 SessionId（恒等 brand），二者相同
         ts,
         iconUrl: renderIconUrl(config.icons, status), // SPEC §7.4：未配置/禁用为 ""
+        durationMs: durationMs,
       };
       coalescer.push(sessionId, () => dispatch(notification));
     } catch (error) {
