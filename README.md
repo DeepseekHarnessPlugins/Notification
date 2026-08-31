@@ -33,6 +33,9 @@ task-notify:
   desktop:
     enabled: auto                     # auto | on | off（auto 按平台探测）
     sound: true                       # macOS 播放 Glass 提示音；Windows 静音开关
+    backend: auto                     # auto | osascript | terminal-notifier（仅 macOS）
+    clickUrl: ""                      # 点击通知时打开的 URL（仅 terminal-notifier 后端生效）
+    notifierPath: ""                  # 显式指定 terminal-notifier 路径（非标准安装时用）
   format:
     time: short                       # hidden | short | full —— 正文尾部时间样式
     showDuration: true                # 负载携带 durationMs 时追加「用时 X」
@@ -61,6 +64,52 @@ task-notify:
 优先级：patch 显式配置 > `settings.yaml` > 环境变量（如
 `DSH_TASK_NOTIFY_BARK_DEVICE_KEY`、`DSH_TASK_NOTIFY_ICONS_URL_TEMPLATE`）>
 内置默认值。
+
+### macOS 后端与点击跳转
+
+macOS 有两个后端，`desktop.backend` 控制选择：
+
+| backend | 预览图 | 点击跳转 | 依赖 |
+|---|---|---|---|
+| `osascript` | 不支持 | 不支持（点通知激活 Script Editor） | 零（系统自带） |
+| `terminal-notifier`（3.x） | `-contentImage <png>` | `-open <url>` | `brew install terminal-notifier` + 系统设置授权 |
+| `auto`（默认） | 有则用 notifier | 有则用 notifier | 探测到就升级，没有就静默回退 osascript |
+
+**为什么默认 `auto`**：`display notification` 这个 AppleScript API 既没有图片参数也没有 URL 参数。
+所以 osascript 后端下，`config.icons` 和 `clickUrl` 都会被忽略，点击通知只能激活**发布通知的进程**。
+`osascript` 本身不是 GUI 应用，macOS 通知中心把它解析到 **Script Editor**——这就是「点通知弹出脚本
+编辑器」的原因，不是 bug 而是 API 天花板。
+
+**`terminal-notifier` 3.x 的限制**：移除了 `-icon` / `-appIcon`（macOS 无 API 可改逐通知图标，
+图标永远来自 app bundle 自身的图标）。逐事件预览图通过 `-contentImage <png>` 附上，按 event
+解析 `assets/icons/<event>.png`（缺失→`notify.png`→不带图）。
+
+`terminal-notifier` 补上点击跳转：`-open <url>` 让点击打开浏览器。探测顺序：
+`desktop.notifierPath`（显式）→ `/opt/homebrew/bin/` → `/usr/local/bin/` → `/usr/bin/terminal-notifier`。
+`backend: terminal-notifier` 但没找到二进制时回退 osascript 并 warn 一次。
+
+**安装与授权**（两步都要）：
+
+```bash
+brew install terminal-notifier
+```
+
+然后**必须**在系统设置里给 `terminal-notifier` 开通知权限——命令行无法绕过：
+
+1. 系统设置 → 通知
+2. 找到 **terminal-notifier**（不在列表里就点「+」添加）
+3. 打开「允许通知」
+
+授权后配置 `clickUrl` 指向 DSH 的 Web GUI：
+
+```yaml
+desktop:
+  backend: auto
+  clickUrl: http://127.0.0.1:3080
+```
+
+授权生效前，`terminal-notifier` 会报 "Notifications are turned off"，
+自动回退 osascript。授权后自动切换。
 
 ### 通知排版
 

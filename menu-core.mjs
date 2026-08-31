@@ -6,7 +6,7 @@
  * 由交互壳决定，放弃退出时天然零副作用。
  */
 
-export const KNOWN_EVENTS = ['idle', 'completed', 'error', 'blocked', 'goal-completed'];
+export const KNOWN_EVENTS = ['idle', 'error', 'blocked', 'goal-completed'];
 export const TIME_STYLE_VALUES = ['hidden', 'short', 'full'];
 export const DESKTOP_MODES = ['auto', 'on', 'off'];
 

@@ -29,11 +29,11 @@ export const DEFAULT_SETTINGS_PATH = join(homedir(), '.dsh', 'settings.yaml');
 export function defaultConfig() {
   return {
     enabled: true,
-    notifyOn: ['idle', 'error', 'blocked', 'completed', 'goal-completed'],
+    notifyOn: ['idle', 'error', 'blocked'],
     agents: 'root',
     coalesceWindowMs: 2000,
     maxBodyLength: 120,
-    desktop: { enabled: 'auto', sound: true },
+    desktop: { enabled: 'auto', sound: true, backend: 'auto', clickUrl: '', notifierPath: '' },
     bark: { enabled: false, server: 'https://api.day.app', deviceKey: '', sound: '' },
     ntfy: { enabled: false, server: 'https://ntfy.sh', topic: '', token: '' },
     serverchan: { enabled: false, sendKey: '' },
@@ -53,7 +53,7 @@ const KNOWN_TOP_KEYS = new Set([
   'desktop', 'bark', 'ntfy', 'serverchan', 'webhook', 'icons', 'format',
 ]);
 const KNOWN_SECTION_KEYS = {
-  desktop: new Set(['enabled', 'sound']),
+  desktop: new Set(['enabled', 'sound', 'backend', 'clickUrl', 'notifierPath']),
   bark: new Set(['enabled', 'server', 'deviceKey', 'sound']),
   ntfy: new Set(['enabled', 'server', 'topic', 'token']),
   serverchan: new Set(['enabled', 'sendKey']),
@@ -172,6 +172,10 @@ const ENV_MAP = [
   ['DSH_TASK_NOTIFY_MAX_BODY_LENGTH', [], 'maxBodyLength', coerceNonNegInt],
   ['DSH_TASK_NOTIFY_DESKTOP_ENABLED', ['desktop'], 'enabled', coerceDesktopMode],
   ['DSH_TASK_NOTIFY_DESKTOP_SOUND', ['desktop'], 'sound', coerceBool],
+  // v0.3.1：macOS 双后端（osascript | terminal-notifier）与点击跳转 URL
+  ['DSH_TASK_NOTIFY_DESKTOP_BACKEND', ['desktop'], 'backend', coerceBackend],
+  ['DSH_TASK_NOTIFY_DESKTOP_CLICK_URL', ['desktop'], 'clickUrl', coerceTrimmedString],
+  ['DSH_TASK_NOTIFY_DESKTOP_NOTIFIER_PATH', ['desktop'], 'notifierPath', coerceTrimmedString],
   ['DSH_TASK_NOTIFY_BARK_ENABLED', ['bark'], 'enabled', coerceBool],
   ['DSH_TASK_NOTIFY_BARK_SERVER', ['bark'], 'server', coerceTrimmedString],
   ['DSH_TASK_NOTIFY_BARK_DEVICE_KEY', ['bark'], 'deviceKey', coerceTrimmedString],
@@ -259,6 +263,11 @@ function normalizeInPlace(cfg, warn) {
 
   cfg.desktop.enabled = withFallback(coerceDesktopMode(cfg.desktop?.enabled), 'auto', 'desktop.enabled', warn);
   cfg.desktop.sound = withFallback(coerceBool(cfg.desktop?.sound), true, 'desktop.sound', warn);
+  // v0.3.1：macOS 后端选择与点击跳转。后端非法值回退 'auto' 并 warn，
+  // 保证用户写错也不至于完全发不出通知。
+  cfg.desktop.backend = withFallback(coerceBackend(cfg.desktop?.backend), 'auto', 'desktop.backend', warn);
+  cfg.desktop.clickUrl = withFallback(coerceTrimmedString(cfg.desktop?.clickUrl), '', 'desktop.clickUrl', warn);
+  cfg.desktop.notifierPath = withFallback(coerceTrimmedString(cfg.desktop?.notifierPath), '', 'desktop.notifierPath', warn);
 
   cfg.bark = normalizeChannel(cfg.bark, KNOWN_SECTION_KEYS.bark, 'bark', warn, {
     server: 'https://api.day.app',
@@ -354,6 +363,13 @@ function coerceDesktopMode(v) {
   const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
   if (s === 'auto' || s === 'on' || s === 'off') return ok(s);
   return fail(`desktop.enabled 只接受 auto | on | off`);
+}
+
+/** v0.3.1：macOS 通知后端。auto=有 terminal-notifier 就用它，否则 osascript。 */
+function coerceBackend(v) {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  if (s === 'auto' || s === 'osascript' || s === 'terminal-notifier') return ok(s);
+  return fail('desktop.backend 只接受 auto | osascript | terminal-notifier');
 }
 
 /** v0.3：format.time 合法值。 */
