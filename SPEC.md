@@ -234,8 +234,17 @@ env：`DSH_TASK_NOTIFY_ICONS_ENABLED`、`DSH_TASK_NOTIFY_ICONS_URL_TEMPLATE`。
 - **windows**：icons.enabled 时按 event 选 `assets/icons/<event>.png`
   （缺失→notify.png），在 binding 内插入
   `<image placement="appLogoOverride" src="file:///<ABS>"/>`
-  （单引号 doubling 路径）。macOS 通知中心不支持自定义图 → 不接，注释说明。
-- **bark**：payload.iconUrl 非空时追加查询参数 `icon=<encodeURIComponent(url)>`。
+   （单引号 doubling 路径）。
+ - **macos**：双后端（v0.3.1 修订）。`desktop.backend=auto` 时探测
+   `desktop.notifierPath` → `/opt/homebrew/bin/` → `/usr/local/bin/` →
+   `/usr/bin/terminal-notifier`；命中则用 terminal-notifier，`icons.enabled !== false`
+   时按 event 解析 `assets/icons/<event>.png`（缺失→notify.png→不带图）作 `-contentImage`
+   预览图（3.x 已移除 `-icon`），`desktop.clickUrl` 非空时传 `-open` 实现点击跳转。
+   未命中或显式 `osascript` 时走 `display notification`——该 API 无图片参数也无 URL 参数，
+   故 icons/clickUrl 被忽略；点击通知只会激活发布进程，而 `osascript` 非 GUI 应用，
+   macOS 解析到 Script Editor（API 天花板，非 bug）。terminal-notifier 的 `-title`/`-message`
+   经 `NSString stringWithFormat` 处理，正文 `%` 转义为 `%%`。授权由用户在系统设置
+   > 通知里授予（命令行无法绕过）；未授权时自动回退 osascript。
 - **ntfy**：payload.iconUrl 非空时加头 `X-Icon: <url>`。
 - **serverchan**：无图标通道，不接。
 - **generic**：JSON body 增加 `icon`（iconUrl 原值）与 `iconSvg`

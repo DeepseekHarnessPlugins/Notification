@@ -13,6 +13,7 @@ export const DEFAULT_MAX_BODY_LENGTH = 120;
 // SPEC §7.1 — strings are locked verbatim, no emoji anywhere.
 const TITLE_BY_EVENT = Object.freeze({
   idle: "任务完成",
+  completed: "任务完成",
   error: "任务出错",
   blocked: "需要确认",
   "goal-completed": "目标达成",

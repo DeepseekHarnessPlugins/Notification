@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { readFileSync } from "node:fs";
+import { promises as fsPromises } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildNotificationScript, createChannel as createMacosChannel } from "./macos.mjs";
+import {
+  buildNotificationScript,
+  buildNotifierArgs,
+  createChannel as createMacosChannel,
+  escapeNotifierText,
+  findTerminalNotifier,
+  resolveBackend,
+  TERMINAL_NOTIFIER_CANDIDATES,
+} from "./macos.mjs";
 import { buildToastScript, createChannel as createWindowsChannel } from "./windows.mjs";
 import {
   attachIconSvg,
@@ -40,6 +49,19 @@ function makeDeps(overrides = {}) {
     calls,
   };
   return Object.assign(deps, overrides);
+}
+
+/**
+ * Materialize a real file on disk so `resolveBackend` (which uses
+ * `fs.existsSync`) accepts the path as a valid terminal-notifier binary.
+ * The file is empty — `deps.run` is faked, so no process is ever spawned.
+ */
+async function mkFakeNotifier() {
+  const dir = await fsPromises.mkdtemp(join(tmpdir(), "dsh-tn-"));
+  const path = join(dir, "terminal-notifier");
+  await fsPromises.writeFile(path, "#!/bin/sh\nexit 0\n");
+  await fsPromises.chmod(path, 0o755);
+  return path;
 }
 
 // SPEC §7.1：v0.2 起标题无 emoji，字符串逐字锁定。
@@ -124,8 +146,205 @@ describe("macos channel", () => {
     assert.equal(deps.calls.run.length, 0);
   });
 
+  // ------------------------------------------------------------------
+  // v0.3.1：terminal-notifier 后端与点击跳转
+  // ------------------------------------------------------------------
+
+  test("resolveBackend(auto) picks terminal-notifier when it exists on disk", () => {
+    const fakeExists = (path) => path === "/opt/homebrew/bin/terminal-notifier";
+    assert.deepEqual(resolveBackend({}, fakeExists), {
+      kind: "notifier",
+      path: "/opt/homebrew/bin/terminal-notifier",
+    });
+  });
+
+  test("resolveBackend(auto) falls back to osascript when terminal-notifier is absent", () => {
+    assert.deepEqual(resolveBackend({}, () => false), { kind: "osascript" });
+  });
+
+  test("resolveBackend(osascript) forces osascript even when the binary exists", () => {
+    const kind = resolveBackend({ backend: "osascript" }, () => true).kind;
+    assert.equal(kind, "osascript");
+  });
+
+  test("findTerminalNotifier probes candidates in order and honors explicit notifierPath", () => {
+    assert.equal(
+      findTerminalNotifier({}, () => false),
+      null,
+    );
+    const fakeExists = (p) => p === "/usr/local/bin/terminal-notifier";
+    assert.equal(
+      findTerminalNotifier({}, fakeExists),
+      "/usr/local/bin/terminal-notifier",
+    );
+    // 显式路径优先：即使它不在候选列表里，只要存在就返回。
+    const explicit = "/some/weird/path/tn";
+    assert.equal(
+      findTerminalNotifier({ notifierPath: "  /some/weird/path/tn  " }, (p) => p === explicit),
+      explicit,
+    );
+    // 显式路径不存在时继续走候选列表。
+    assert.equal(
+      findTerminalNotifier({ notifierPath: "/no/such/path" }, fakeExists),
+      "/usr/local/bin/terminal-notifier",
+    );
+  });
+
+  test("buildNotifierArgs emits -title -message -contentImage -open with percent escaping", () => {
+    const args = buildNotifierArgs({
+      title: "50% done",
+      body: "it's %d items",
+      sound: true,
+      imagePath: "/assets/idle.png",
+      clickUrl: "http://127.0.0.1:3080/",
+    });
+    assert.deepEqual(args, [
+      "-title",
+      "50%% done",
+      "-message",
+      "it's %%d items",
+      "-sound",
+      "Glass",
+      "-contentImage",
+      "/assets/idle.png",
+      "-open",
+      "http://127.0.0.1:3080/",
+    ]);
+  });
+
+  test("buildNotifierArgs omits optional flags when missing/empty", () => {
+    assert.deepEqual(buildNotifierArgs({ title: "t", body: "b" }), [
+      "-title",
+      "t",
+      "-message",
+      "b",
+    ]);
+  });
+
+  test("terminal-notifier backend invokes the binary with the resolved image path", async () => {
+    const notifier = await mkFakeNotifier();
+    const deps = makeDeps();
+    const channel = createMacosChannel(
+      {
+        enabled: true,
+        sound: true,
+        icons: { enabled: false },
+        backend: "terminal-notifier",
+        notifierPath: notifier,
+        clickUrl: "",
+      },
+      deps,
+    );
+
+    await channel.send({ ...PAYLOAD, event: "idle" });
+
+    assert.equal(deps.calls.run.length, 1);
+    const [file, args] = deps.calls.run[0];
+    assert.equal(file, notifier);
+    assert.equal(args[0], "-title");
+    assert.equal(args[2], "-message");
+    assert.match(args[3], /修复登录跳转/);
+    // 3.x 用 -contentImage 做预览图；不带图时不发 -contentImage。
+    assert.doesNotMatch(args.join(" "), /-icon|-contentImage/);
+    assert.doesNotMatch(args.join(" "), /-open/);
+  });
+
+  test("auto backend falls back to osascript when no binary is present", async () => {
+    const deps = makeDeps();
+    const channel = createMacosChannel(
+      {
+        enabled: true,
+        sound: false,
+        icons: { enabled: true },
+        clickUrl: "http://127.0.0.1:3080/",
+      },
+      deps,
+    );
+
+    await channel.send(PAYLOAD);
+
+    assert.equal(deps.calls.run.length, 1);
+    const [file, args] = deps.calls.run[0];
+    assert.equal(file, "osascript");
+    assert.equal(args[0], "-e");
+    assert.equal(args[1], 'display notification "修复登录跳转" with title "任务完成"');
+  });
+
+  test("osascript backend never exposes the clickUrl, even when configured", async () => {
+    const deps = makeDeps();
+    const channel = createMacosChannel(
+      {
+        enabled: true,
+        backend: "osascript",
+        clickUrl: "http://127.0.0.1:3080/",
+      },
+      deps,
+    );
+
+    await channel.send(PAYLOAD);
+
+    const script = deps.calls.run[0][1][1];
+    assert.doesNotMatch(script, /127\.0\.0\.1|http|open/i);
+  });
+
+  test("icons.enabled=false suppresses -contentImage on the notifier backend", async () => {
+    const notifier = await mkFakeNotifier();
+    const deps = makeDeps();
+    const channel = createMacosChannel(
+      {
+        enabled: true,
+        backend: "terminal-notifier",
+        notifierPath: notifier,
+        icons: { enabled: false },
+        clickUrl: "http://127.0.0.1:3080/",
+      },
+      deps,
+    );
+
+    await channel.send({ ...PAYLOAD, event: "idle" });
+
+    const args = deps.calls.run[0][1];
+    assert.doesNotMatch(args.join(" "), /-icon|-contentImage/);
+  });
+
+  test("clickUrl present on the notifier backend becomes -open with the configured URL", async () => {
+    const notifier = await mkFakeNotifier();
+    const deps = makeDeps();
+    const channel = createMacosChannel(
+      {
+        enabled: true,
+        backend: "terminal-notifier",
+        notifierPath: notifier,
+        icons: { enabled: false },
+        clickUrl: "http://127.0.0.1:3080/",
+      },
+      deps,
+    );
+
+    await channel.send(PAYLOAD);
+
+    const args = deps.calls.run[0][1];
+    assert.deepEqual(args.slice(-2), ["-open", "http://127.0.0.1:3080/"]);
+  });
+
+  test("escapeNotifierText percent-escapes format specifiers", () => {
+    assert.equal(escapeNotifierText("50% off"), "50%% off");
+    assert.equal(escapeNotifierText("100%%"), "100%%%%");
+    assert.equal(escapeNotifierText("plain"), "plain");
+  });
+
   test("missing deps throw at construction so the registry can skip", () => {
     assert.throws(() => createMacosChannel({}, {}), TypeError);
+  });
+
+  test("TERMINAL_NOTIFIER_CANDIDATES covers both Homebrew archs and is frozen", () => {
+    assert.equal(TERMINAL_NOTIFIER_CANDIDATES.length, 3);
+    assert.match(TERMINAL_NOTIFIER_CANDIDATES[0], /\/opt\/homebrew\/bin\/terminal-notifier$/);
+    assert.match(TERMINAL_NOTIFIER_CANDIDATES[1], /\/usr\/local\/bin\/terminal-notifier$/);
+    // Frozen (Object.freeze): indices are non-writable and non-configurable.
+    assert.equal(Object.isFrozen(TERMINAL_NOTIFIER_CANDIDATES), true);
+    assert.equal(Object.getOwnPropertyDescriptor(TERMINAL_NOTIFIER_CANDIDATES, "0").writable, false);
+    assert.equal(Object.getOwnPropertyDescriptor(TERMINAL_NOTIFIER_CANDIDATES, "0").configurable, false);
   });
 });
 

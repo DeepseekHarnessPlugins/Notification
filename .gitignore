@@ -3,3 +3,7 @@ node_modules/
 .npm-cache/
 .DS_Store
 scripts/submit-awesome.sh
+# Build artifacts & backups
+uploaded-icon.png
+icon-backup-orig/
+*.bak-orig

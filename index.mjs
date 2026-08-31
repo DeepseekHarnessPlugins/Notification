@@ -128,20 +128,39 @@ export function apply(ctx, input = {}, overrides = {}) {
   const logger = makeLogger(ctx);
   const deps = makeDeps(logger, overrides);
 
-  // 文案模块：overrides.format（测试缝）> ./format.mjs > 内置兜底。
-  // format.mjs 属并行工作流可能暂不存在——异步装载、同步兜底，事件零等待。
+  // 文案模块：overrides.format（测试缝）> 同步尝试加载 ./format.mjs > 异步兜底 > 内置兜底。
+  // 竞态修复：优先同步加载消除竞态；仅当同步失败（如并行工作流无 format.mjs）时异步重试。
   /** @type {{formatTitle: Function, formatBody: Function}} */
   let format = overrides.format ?? fallbackFormat;
+  let formatReady = Promise.resolve();
   if (overrides.format === undefined) {
-    import('./format.mjs')
-      .then((mod) => {
-        if (isFormatModule(mod)) format = mod;
-        else logger.warn('[task-notify] format.mjs 导出不符合契约，使用内置文案模板');
-      })
-      .catch((error) => {
-        logger.warn(`[task-notify] format.mjs 加载失败，使用内置文案模板：${describe(error)}`);
-      });
+    // 尝试同步加载（测试与常规 DSH 均有 format.mjs，可消除竞态）
+    let syncLoaded = false;
+    try {
+      const req = module.createRequire(import.meta.url);
+      const mod = req('./format.mjs');
+      if (isFormatModule(mod)) {
+        format = mod;
+        syncLoaded = true;
+      } else {
+        logger.warn('[task-notify] format.mjs 导出不符合契约，使用内置文案模板');
+      }
+    } catch {
+      // 同步加载失败（如文件不存在），回退异步加载
+    }
+    if (!syncLoaded) {
+      formatReady = import('./format.mjs')
+        .then((mod) => {
+          if (isFormatModule(mod)) format = mod;
+          else logger.warn('[task-notify] format.mjs 导出不符合契约，使用内置文案模板');
+        })
+        .catch((error) => {
+          logger.warn(`[task-notify] format.mjs 加载失败，使用内置文案模板：${describe(error)}`);
+        });
+    }
   }
+
+  const sessionStartTimes = new Map();
 
   /** @type {Promise<Array<{name: string, send: (p: object) => Promise<void>}>>|null} */
   let channelsReady = null;
@@ -178,7 +197,10 @@ export function apply(ctx, input = {}, overrides = {}) {
       .catch((error) => logger.warn(`[task-notify] 通道装载失败，本次通知丢弃：${describe(error)}`));
   };
 
-  ctx.on('agent/status', (payload) => {
+  // 竞态修复：同步注册处理器；format 未就绪时入队（含时间戳），就绪后批量处理并切换为实时处理器。
+  const pendingEvents = [];
+  let formatResolved = false;
+  const processEvent = (payload, ts) => {
     try {
       const { agent, status } = payload ?? {};
       if (!agent || typeof status !== 'string') return;
@@ -187,7 +209,8 @@ export function apply(ctx, input = {}, overrides = {}) {
 
       // 构造与入队保持同步完成：dedupe 只保留同会话最后一次的最终 payload。
       const sessionId = safeId(agent) || String(agent.id);
-      const ts = deps.now();
+      if (!sessionStartTimes.has(sessionId)) sessionStartTimes.set(sessionId, ts);
+      const durationMs = ts - sessionStartTimes.get(sessionId);
       const rawBody = deriveBody(agent, sessionId);
       // v0.3：composeBody 存在时正文尾部带格式化时间（format.time 控制）；
       // 旧契约（overrides.format 注入的假 format）无此方法时保持纯摘要行为。
@@ -196,6 +219,7 @@ export function apply(ctx, input = {}, overrides = {}) {
             ts,
             timeStyle: config.format.time,
             showDuration: config.format.showDuration,
+            durationMs: durationMs,
             maxLen: config.maxBodyLength,
           })
         : format.formatBody(rawBody, config.maxBodyLength);
@@ -207,12 +231,29 @@ export function apply(ctx, input = {}, overrides = {}) {
         agentId: safeId(agent), // 研究：Agent.id 即 SessionId（恒等 brand），二者相同
         ts,
         iconUrl: renderIconUrl(config.icons, status), // SPEC §7.4：未配置/禁用为 ""
+        durationMs: durationMs,
       };
       coalescer.push(sessionId, () => dispatch(notification));
     } catch (error) {
       // 双保险：宿主本身会吞监听器异常并 warn，但插件自律不外抛。
       logger.warn(`[task-notify] 处理 agent/status 事件失败：${describe(error)}`);
     }
+  };
+
+  const handler = (payload) => {
+    const ts = deps.now(); // 捕获事件到达时刻
+    if (formatResolved) {
+      processEvent(payload, ts);
+    } else {
+      pendingEvents.push({ payload, ts });
+    }
+  };
+  ctx.on('agent/status', handler);
+
+  formatReady.then(() => {
+    formatResolved = true;
+    for (const { payload, ts } of pendingEvents) processEvent(payload, ts);
+    pendingEvents.length = 0;
   });
 
   ctx.effect(

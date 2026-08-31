@@ -290,7 +290,7 @@ test('payload 符合 SPEC 5.1/7.4：event/title/body/sessionId/agentId/ts/iconUr
       { type: 'session/title', data: { title: '重构通知插件' } },
     ],
   });
-  apply(ctx, {}, { config: fullConfig({ maxBodyLength: 120, coalesceWindowMs: 5 }), channels });
+  apply(ctx, {}, { config: fullConfig({ maxBodyLength: 120, coalesceWindowMs: 5, format: { time: 'hidden' } }), channels });
   ctx.emit('agent/status', { agent: titledAgent, status: 'idle' });
   await flushMicrotasks();
   t.mock.timers.tick(5);
@@ -313,7 +313,7 @@ test('无标题无用户消息 → body 降级「会话 <前8位>」；超长文
   const ctx = makeFakeCtx();
   const { channels, sent } = makeRecordingChannels([{ name: 'rec' }]);
 
-  apply(ctx, {}, { config: fullConfig({ maxBodyLength: 12, coalesceWindowMs: 5 }), channels });
+  apply(ctx, {}, { config: fullConfig({ maxBodyLength: 12, coalesceWindowMs: 5, format: { time: 'hidden' } }), channels });
 
   const bareAgent = makeAgent({ id: 'abcdefgh-ijkl' }); // 无日志事件
   ctx.emit('agent/status', { agent: bareAgent, status: 'blocked' });

@@ -290,3 +290,96 @@ test('format 段不是对象时整体回退默认', () => {
   assert.deepEqual({ ...config.format }, { time: 'short', showDuration: true });
   assert.ok(warnings.some((w) => w.includes('format 段')));
 });
+
+// ------------------------------------------------------------------
+// v0.3.1：desktop 新增 backend / clickUrl / notifierPath
+// ------------------------------------------------------------------
+
+test('desktop 段默认值：backend=auto、clickUrl=""、notifierPath=""', () => {
+  const { config } = resolveConfigDetailed({}, {}, null);
+  assert.equal(config.desktop.backend, 'auto');
+  assert.equal(config.desktop.clickUrl, '');
+  assert.equal(config.desktop.notifierPath, '');
+  assert.equal(Object.isFrozen(config.desktop), true);
+});
+
+test('desktop.backend 接受 auto | osascript | terminal-notifier，大小写宽容', () => {
+  const { config, warnings } = resolveConfigDetailed(
+    { desktop: { backend: 'TERMINAL-NOTIFIER' } },
+    {},
+    null,
+  );
+  assert.equal(config.desktop.backend, 'terminal-notifier');
+  assert.equal(warnings.length, 0);
+});
+
+test('desktop.backend 非法值回退 auto 并 warn', () => {
+  const { config, warnings } = resolveConfigDetailed(
+    { desktop: { backend: 'sometimes' } },
+    {},
+    null,
+  );
+  assert.equal(config.desktop.backend, 'auto');
+  assert.ok(warnings.some((w) => w.includes('desktop.backend')));
+});
+
+test('desktop.clickUrl 与 notifierPath 按字符串归一化（去首尾空白）', () => {
+  const { config, warnings } = resolveConfigDetailed(
+    {
+      desktop: {
+        clickUrl: '   http://127.0.0.1:3080/   ',
+        notifierPath: '  /opt/homebrew/bin/terminal-notifier  ',
+      },
+    },
+    {},
+    null,
+  );
+  assert.equal(config.desktop.clickUrl, 'http://127.0.0.1:3080/');
+  assert.equal(config.desktop.notifierPath, '/opt/homebrew/bin/terminal-notifier');
+  assert.equal(warnings.length, 0);
+});
+
+test('desktop.clickUrl 非字符串回退空串并 warn', () => {
+  const { config, warnings } = resolveConfigDetailed(
+    { desktop: { clickUrl: null, notifierPath: [] } },
+    {},
+    null,
+  );
+  assert.equal(config.desktop.clickUrl, '');
+  assert.equal(config.desktop.notifierPath, '');
+  assert.ok(warnings.some((w) => w.includes('desktop.clickUrl')));
+  assert.ok(warnings.some((w) => w.includes('desktop.notifierPath')));
+});
+
+test('env 层覆盖：DSH_TASK_NOTIFY_DESKTOP_BACKEND / _CLICK_URL / _NOTIFIER_PATH', () => {
+  const { config } = resolveConfigDetailed(
+    {},
+    {
+      DSH_TASK_NOTIFY_DESKTOP_BACKEND: 'osascript',
+      DSH_TASK_NOTIFY_DESKTOP_CLICK_URL: 'http://127.0.0.1:3080/',
+      DSH_TASK_NOTIFY_DESKTOP_NOTIFIER_PATH: '/custom/tn',
+    },
+    null,
+  );
+  assert.equal(config.desktop.backend, 'osascript');
+  assert.equal(config.desktop.clickUrl, 'http://127.0.0.1:3080/');
+  assert.equal(config.desktop.notifierPath, '/custom/tn');
+});
+
+test('desktop 段未知键 warn 并忽略（新增键不被误报）', () => {
+  const { config, warnings } = resolveConfigDetailed(
+    { desktop: { backend: 'auto', unknownKey: 1 } },
+    {},
+    null,
+  );
+  assert.equal(config.desktop.backend, 'auto');
+  assert.equal(config.desktop.unknownKey, undefined);
+  assert.ok(warnings.some((w) => w.includes('desktop 段未知键 "unknownKey"')));
+  // 新增的三个合法键不应被当作未知键。
+  const { warnings: w2 } = resolveConfigDetailed(
+    { desktop: { backend: 'auto', clickUrl: '', notifierPath: '' } },
+    {},
+    null,
+  );
+  assert.equal(w2.length, 0);
+});
